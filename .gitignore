@@ -1,0 +1,15 @@
+# Depth-Anything-V2 is fetched by the user (see README §2)
+Depth-Anything-V2/
+Depth-Anything-V2
+
+# Model checkpoints are distributed separately (see README §4)
+models/
+
+# Outputs
+test_result*.png
+*.pth
+*.tar
+
+__pycache__/
+*.py[cod]
+.DS_Store

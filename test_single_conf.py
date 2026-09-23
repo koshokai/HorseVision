@@ -1,0 +1,208 @@
+import os
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import numpy as np
+import cv2
+from PIL import Image
+
+# Import models
+from cross_atte_ori import MiniDA3_ViTBase
+from networks import DepthAnythingV2FisheyeNet 
+from repro_tensor import FisheyeSelfSupervisedLoss
+
+scene = 'outdoor'
+MAX_DEPTH = 80.0
+PRETRAINED_FISH = "models/outdoor/self_supervised_fish_carla/self_fish.tar"
+CHECKPOINT_MINIDA3 = "models/outdoor/supervised_erp/sup_erp.pth"
+paths = {
+        'l_rgb': "test_imgs/occ_img/occ_fish/left/0_rgb.png",
+        'r_rgb': "test_imgs/occ_img/occ_fish/right/0_rgb.png",
+        'l_depth': "test_imgs/occ_img/occ_fish/left/0_depth.npy",
+        'r_depth':"test_imgs/occ_img/occ_fish/right/0_depth.npy",
+        'pano_depth': "test_imgs/occ_img/occ_erp/left/0_pano_depth.npy"
+    }
+
+# =========================================================
+# 1. Geometry Generator (Splatting) - Fully Preserved
+# =========================================================
+class SmoothDepthGenerator(nn.Module):
+    def __init__(self, device='cuda'):
+        super().__init__()
+        self.device = device
+        self.LEFT_PARAMS = {'f': 145.41, 'k1': -0.0239, 'cx_offset': -5.0, 'cy_offset': -5.0}
+        self.RIGHT_PARAMS = {'f': 149.93, 'k1': -0.0313, 'cx_offset': 5.0, 'cy_offset': 5.0}
+        
+        ang = np.deg2rad(-75.0)
+        c, s = np.cos(ang), np.sin(ang)
+        mat_rot = torch.tensor([[c, 0, -s, 0], [0, 1, 0, 0], [s, 0, c, 0], [0, 0, 0, 1]], device=self.device).float()
+        mat_trans = torch.eye(4, device=self.device).float(); mat_trans[0, 3] = 0.2
+        M_step1 = torch.matmul(mat_trans, mat_rot)
+        self.M_right_cam_to_world = torch.matmul(mat_rot, M_step1)
+        
+    def fisheye_grid_to_3d(self, h, w, param):
+        v, u = torch.meshgrid(torch.arange(h, device=self.device), torch.arange(w, device=self.device), indexing='ij')
+        cx, cy = w/2.0 + param['cx_offset'], h/2.0 + param['cy_offset']
+        u_val, v_val = u - cx, -(v - cy)
+        phi = torch.atan2(v_val, u_val)
+        r_pix = torch.sqrt(u_val**2 + v_val**2)
+        theta = r_pix / param['f'] / (1 + param['k1'] * (r_pix / param['f'])**2)
+        mask = theta < np.deg2rad(110.1)
+        sin_t, cos_t = torch.sin(theta), torch.cos(theta)
+        vecs = torch.stack([sin_t*torch.cos(phi), sin_t*torch.sin(phi), cos_t], dim=-1)
+        return vecs, mask
+
+    def bilinear_splatting(self, points_3d, dist, ph, pw):
+        lon = torch.atan2(points_3d[:,0], points_3d[:,2])
+        lat = torch.asin(torch.clamp(points_3d[:,1] / (dist + 1e-8), -1.0, 1.0))
+        u_pano = ((lon / (2 * np.pi)) + 0.5) * (pw - 1)
+        v_pano = ((-lat / np.pi) + 0.5) * (ph - 1)
+        
+        u0, v0 = torch.floor(u_pano).long(), torch.floor(v_pano).long()
+        u1, v1 = torch.clamp(u0 + 1, 0, pw - 1), torch.clamp(v0 + 1, 0, ph - 1)
+        u0, v0 = torch.clamp(u0, 0, pw - 1), torch.clamp(v0, 0, ph - 1)
+        
+        wu, wv = u_pano - u0.float(), v_pano - v0.float()
+        depth_weight = 1.0 / (dist + 0.1)
+        depth_accum = torch.zeros((ph, pw), device=self.device)
+        weight_accum = torch.zeros((ph, pw), device=self.device)
+        
+        for (ux, vx, w) in [(u0, v0, (1-wu)*(1-wv)), (u0, v1, (1-wu)*wv), (u1, v0, wu*(1-wv)), (u1, v1, wu*wv)]:
+            idx = vx * pw + ux
+            combined_w = w * depth_weight
+            depth_accum.view(-1).scatter_add_(0, idx, dist * combined_w)
+            weight_accum.view(-1).scatter_add_(0, idx, combined_w)
+            
+        return torch.where(weight_accum > 1e-6, depth_accum / weight_accum, torch.tensor(MAX_DEPTH, device=self.device))
+
+    def generate_pano_depth(self, dep_l, dep_r, ph, pw):
+        vl, ml = self.fisheye_grid_to_3d(*dep_l.shape, self.LEFT_PARAMS)
+        pts_w_l = vl * dep_l.unsqueeze(-1)
+        
+        vr, mr = self.fisheye_grid_to_3d(*dep_r.shape, self.RIGHT_PARAMS)
+        pts_local_r = vr * dep_r.unsqueeze(-1)
+        ones = torch.ones_like(dep_r).unsqueeze(-1)
+        pts_w_r = torch.matmul(torch.cat([pts_local_r, ones], dim=-1), self.M_right_cam_to_world.t())[..., :3]
+        
+        all_pts = torch.cat([pts_w_l[ml & (dep_l <= MAX_DEPTH)], pts_w_r[mr & (dep_r <= MAX_DEPTH)]], dim=0)
+        dist = torch.linalg.norm(all_pts, dim=1)
+        return self.bilinear_splatting(all_pts, dist, ph, pw)
+
+# =========================================================
+# 2. Visualization Tools
+# =========================================================
+def depth_to_jet_clipped(depth, vmin=0.0, vmax=MAX_DEPTH):
+    d_viz = depth.copy().astype(np.float32)
+    d_norm = np.clip((d_viz - vmin) / (vmax - vmin + 1e-8), 0, 1)
+    d_uint8 = (d_norm * 255).astype(np.uint8)
+    color = cv2.applyColorMap(d_uint8, cv2.COLORMAP_JET)
+    color = cv2.cvtColor(color, cv2.COLOR_BGR2RGB)
+    mask_invalid = (d_viz <= 0.0)
+    color[mask_invalid] = 0
+    return color
+
+# =========================================================
+# 3. Main Inference Program
+# =========================================================
+def test_inference():
+    DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    IMG_SIZE = 518
+
+    print(">>> Loading Models...")
+    model_fish = DepthAnythingV2FisheyeNet(
+        model_size='vitb', pretrained_path=PRETRAINED_FISH, 
+        scene_type=scene, max_depth=MAX_DEPTH, output_img_size=IMG_SIZE
+    ).to(DEVICE).eval()
+
+    model_test = MiniDA3_ViTBase(max_depth=MAX_DEPTH).to(DEVICE).eval()
+    model_test.load_state_dict(torch.load(CHECKPOINT_MINIDA3, map_location=DEVICE))
+    
+    # Initialize loss/reprojection module
+    criterion = FisheyeSelfSupervisedLoss(teacher_model=model_fish, device=DEVICE)
+    pano_gen = SmoothDepthGenerator(device=DEVICE)
+
+    print(">>> Processing Input Data...")
+    def load_img(path):
+        img = cv2.imread(path)
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        img = cv2.resize(img, (IMG_SIZE, IMG_SIZE))
+        return torch.from_numpy(img).permute(2, 0, 1).float().unsqueeze(0) / 255.0
+
+    def load_depth(path, w, h):
+        if not os.path.exists(path):
+            return np.zeros((h, w), dtype=np.float32)
+        d = np.load(path).astype(np.float32)
+        d[d > MAX_DEPTH] = MAX_DEPTH
+        return cv2.resize(d, (w, h), interpolation=cv2.INTER_NEAREST)
+
+    input_l_rgb = load_img(paths['l_rgb']).to(DEVICE)
+    input_r_rgb = load_img(paths['r_rgb']).to(DEVICE)
+    gt_l_depth = load_depth(paths['l_depth'], IMG_SIZE, IMG_SIZE)
+    gt_r_depth = load_depth(paths['r_depth'], IMG_SIZE, IMG_SIZE)
+    gt_p_depth = load_depth(paths['pano_depth'], IMG_SIZE * 2, IMG_SIZE)
+
+    print(">>> Starting Inference...")
+    with torch.no_grad():
+        # A. Fisheye Prediction and Reprojection/Confidence logic
+        preds_fish = model_fish(input_l_rgb, input_r_rgb)
+        pl = preds_fish['front_depth'] 
+        pr = preds_fish['back_depth']
+        
+        # Get Warped (Synth) images and Confidence maps
+        _, img_dict = criterion(input_l_rgb, input_r_rgb, pl, pr)
+
+        # B. Geometric Splatting
+        pano_input_geom = pano_gen.generate_pano_depth(pl[0,0], pr[0,0], IMG_SIZE, IMG_SIZE * 2)
+
+        # C. MiniDA3 Refinement
+        x_in = (pano_input_geom.unsqueeze(0).unsqueeze(0) / MAX_DEPTH).repeat(1, 3, 1, 1)
+        pred_pano = model_test(x_in)
+
+    print(">>> Stitching Results...")
+    # Row 1: RGB
+    rgb_row = np.hstack([
+        (input_l_rgb[0].cpu().numpy().transpose(1, 2, 0) * 255).astype(np.uint8),
+        (input_r_rgb[0].cpu().numpy().transpose(1, 2, 0) * 255).astype(np.uint8)
+    ])
+
+    # Row 2: Reprojection (Synthetic images from repro_tensor)
+    def t2np(t): return cv2.resize((t[0].cpu().numpy().transpose(1, 2, 0)*255).astype(np.uint8), (IMG_SIZE, IMG_SIZE))
+    repro_row = np.hstack([t2np(img_dict['synth_left']), t2np(img_dict['synth_right'])])
+
+    # Row 3: Confidence Maps
+    def c2v(ct): return cv2.resize(cv2.cvtColor((ct[0,0].cpu().numpy()*255).astype(np.uint8), cv2.COLOR_GRAY2RGB), (IMG_SIZE, IMG_SIZE))
+    conf_row = np.hstack([c2v(img_dict['conf_map_l']), c2v(img_dict['conf_map_r'])])
+
+    # Row 4: Pred Fish Depth
+    v_pl = depth_to_jet_clipped(pl[0,0].cpu().numpy())
+    v_pr = depth_to_jet_clipped(pr[0,0].cpu().numpy())
+    pred_fish_row = np.hstack([v_pl, v_pr])
+
+    # Row 5: GT Fish Depth
+    v_gt_l = depth_to_jet_clipped(gt_l_depth)
+    v_gt_r = depth_to_jet_clipped(gt_r_depth)
+    gt_fish_row = np.hstack([v_gt_l, v_gt_r])
+
+    # Row 6: MiniDA3 Pano Pred
+    v_pred_pano = depth_to_jet_clipped(pred_pano[0,0].cpu().numpy())
+    
+    # Row 7: Pano GT
+    v_gt_pano = depth_to_jet_clipped(gt_p_depth)
+
+    # Vertical Stack
+    full_viz = np.vstack([
+        rgb_row,        # 1 Input
+        repro_row,      # 2 Synthetic/Warped
+        conf_row,       # 3 Confidence map
+        pred_fish_row,  # 4 Pred fish depth
+        gt_fish_row,    # 5 Gt fish depth
+        v_pred_pano,    # 6 Pred pano
+        v_gt_pano       # 7 GT pano
+    ])
+
+    save_name = "test_result_integrated.png"
+    Image.fromarray(full_viz).save(save_name)
+    print(f">>> Success! Integrated result saved to: {save_name}")
+
+if __name__ == '__main__':
+    test_inference()
