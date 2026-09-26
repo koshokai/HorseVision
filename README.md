@@ -314,10 +314,13 @@ these parameters and retraining.
 ## 9. Citation
 
 ```bibtex
-@misc{horsevision,
-  title  = {Horse Vision: Panoramic Depth from a Dual-Fisheye Rig},
-  author = {TODO},
-  year   = {2026}
+@inproceedings{horsevision,
+  title     = {Equine-Inspired Vision System: Partially Self-supervised 360{\textdegree} Stereo Panoramic Depth Estimation},
+  author    = {Yu, Han and Li, Jianfeng and Li, Shigang},
+  booktitle = {Proceedings of the Asian Conference on Computer Vision (ACCV)},
+  series    = {Lecture Notes in Computer Science},
+  publisher = {Springer},
+  year      = {2026}
 }
 ```
 
