@@ -1,4 +1,9 @@
-# Horse Vision — Panoramic Depth from a Dual-Fisheye Rig
+# Horse Vision · 马眼视觉 — Panoramic Depth from a Dual-Fisheye Rig
+
+<!-- 中英双语。项目中文名「马眼视觉」，取自马的双眼分居头部两侧、视野接近 350°，
+     与背靠背双鱼眼的成像方式同构。 -->
+
+**中文说明在下方 [中文说明](#中文说明) 一节。**
 
 Feed-forward depth estimation for a **back-to-back dual-fisheye camera**. The two
 fisheye views are predicted independently by a shared Depth-Anything-V2 (DAv2)
@@ -17,6 +22,48 @@ exported for inspection.
 | Peak GPU memory | **1.14 GB** |
 | End-to-end runtime | **3.9 s** (including model loading, RTX 4090) |
 | Scenes | `indoor` (max depth 20 m) · `outdoor` (max depth 80 m) |
+
+---
+
+## 中文说明
+
+**马眼视觉（Horse Vision）** —— 从一对背靠背鱼眼相机直接前馈估计全景深度。
+
+名字的由来：马的双眼长在头部两侧，单眼视野极广，两眼合起来接近 **350°** 的环视能力，
+几乎没有盲区。背靠背双鱼眼的成像方式与之同构 —— 两个朝向相反的广角镜头拼出完整球面。
+
+### 方法
+
+    两路鱼眼 RGB (518x518)
+        ↓  共享的 Depth-Anything-V2 编码器分别预测
+    两张鱼眼深度
+        ↓  几何 splatting 融合
+    等距柱状(ERP)全景深度
+        ↓  轻量 ViT (MiniDA3) 精修
+    全景深度 (518x1036) + 逐视角鱼眼深度 + 置信度图
+
+**自监督信号来自两个鱼眼的重叠视场**：用预测深度把每一路投影到另一路，
+光度一致性给出**逐像素置信度图**，该图也会一并导出供检查。
+
+### 指标
+
+| 项目 | 数值 |
+|---|---|
+| 输入 | 2 路鱼眼 RGB，各 518×518 |
+| 输出 | 全景深度 518×1036 + 逐视角鱼眼深度 + 置信度图 |
+| 显存峰值 | **1.14 GB** |
+| 端到端耗时 | **3.9 秒**（含模型加载，RTX 4090） |
+| 场景 | `indoor`（最大深度 20 m）· `outdoor`（最大深度 80 m） |
+
+显存需求很低（约 1.2 GB），GTX 1060 以上的显卡都能跑。
+
+### 依赖
+
+**本仓库不附带 Depth-Anything-V2**，骨干网络在运行时导入，需要先自行准备。
+详细步骤见下方英文章节 *2. Setting up Depth-Anything-V2*。
+
+**关键词**：马眼视觉 · 全景深度估计 · 双鱼眼 · 鱼眼相机 · 等距柱状投影 ·
+自监督深度 · Depth-Anything-V2 · 前馈深度估计
 
 ---
 
