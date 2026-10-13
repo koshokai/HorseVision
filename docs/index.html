@@ -12,7 +12,7 @@
 <meta property="og:title" content="HorseVision — Equine-Inspired 360° Panoramic Depth Estimation">
 <meta property="og:description" content="Partially self-supervised 360° stereo panoramic depth from a back-to-back dual-fisheye rig (ACCV 2026).">
 <meta property="og:url" content="https://koshokai.github.io/HorseVision/">
-<meta property="og:image" content="https://koshokai.github.io/HorseVision/assets/pano_depth.jpg">
+<meta property="og:image" content="https://koshokai.github.io/HorseVision/assets/outdoor_pano_left_depth.jpg">
 <meta name="twitter:card" content="summary_large_image">
 <!-- Google Search Console: paste your verification meta tag here, e.g.
 <meta name="google-site-verification" content="XXXXXXXX"> -->
@@ -49,6 +49,8 @@ main { max-width:960px; margin:0 auto; padding:40px 16px 64px; }
 h1 { font-size:2rem; line-height:1.25; margin:0 0 8px; }
 h2 { font-size:1.35rem; margin:40px 0 12px; padding-bottom:6px; border-bottom:1px solid var(--border); }
 .sub { color:var(--muted); margin:0 0 4px; }
+h3 { font-size:1.1rem; margin:28px 0 4px; }
+.note { color:var(--muted); font-size:.9rem; margin:0 0 12px; }
 a { color:var(--accent); }
 .buttons { display:flex; flex-wrap:wrap; gap:10px; margin:20px 0; }
 .buttons a { padding:8px 16px; border:1px solid var(--border); border-radius:6px; background:var(--card); text-decoration:none; font-weight:600; }
@@ -56,7 +58,7 @@ figure { margin:0; }
 figure img { width:100%; height:auto; display:block; border-radius:6px; border:1px solid var(--border); }
 figcaption { color:var(--muted); font-size:.9rem; margin-top:6px; }
 .row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
-.stack { display:grid; gap:16px; }
+.stack { display:grid; gap:12px; }
 table { border-collapse:collapse; width:100%; }
 td, th { border:1px solid var(--border); padding:6px 10px; text-align:left; }
 pre { background:var(--card); border:1px solid var(--border); border-radius:6px; padding:12px; overflow-x:auto; font-size:.85rem; }
@@ -79,30 +81,65 @@ pre { background:var(--card); border:1px solid var(--border); border-radius:6px;
 <section>
   <h2>Overview</h2>
   <p>
-    Like a horse, whose laterally placed eyes see almost all the way around with a
-    small binocular overlap in front, HorseVision uses a <strong>back-to-back
-    dual-fisheye camera</strong> to estimate <strong>360° panoramic depth</strong>.
-    The two fisheye views are predicted independently by a shared
-    <a href="https://github.com/DepthAnything/Depth-Anything-V2">Depth-Anything-V2</a>
-    encoder, fused into an equirectangular panorama by geometric splatting, and
-    refined by a lightweight ViT (MiniDA3).
+    A horse sees the world through <strong>two eyes</strong> set on either side of
+    its head: together they cover almost the full 360°, and their fields of view
+    overlap in a narrow binocular region. HorseVision mimics this with a
+    <strong>back-to-back dual-fisheye camera</strong> — a left eye and a right eye —
+    and estimates <strong>360° stereo panoramic depth</strong> for both eyes.
   </p>
   <p>
-    Self-supervision comes from the <strong>overlapping field of view</strong>
-    between the two lenses: each view is warped into the other using the predicted
-    depth, and the photometric agreement yields a per-pixel confidence map.
+    The two fisheye views are predicted by a shared
+    <a href="https://github.com/DepthAnything/Depth-Anything-V2">Depth-Anything-V2</a>
+    encoder, fused into equirectangular panoramas by geometric splatting, and
+    refined by a lightweight ViT (MiniDA3).
+    Self-supervision comes from the <strong>binocular overlap</strong> between the
+    two lenses: each view is warped into the other using the predicted depth, and
+    the photometric agreement yields a per-pixel confidence map.
   </p>
 </section>
 
 <section>
-  <h2>Inputs and outputs</h2>
+  <h2>Sample data</h2>
+  <p>Sample inputs shipped in <code>test_imgs/</code> with their ground-truth depth, shown for both eyes.</p>
+  <h3>Indoor</h3>
+  <p class="note">Max depth 20 m. Depth: jet colormap, 0–20 m (blue = near, red = far, black = invalid).</p>
   <div class="stack">
     <div class="row">
-      <figure><img src="assets/fisheye_left.jpg" width="518" height="518" alt="Left fisheye input image"><figcaption>Left fisheye input</figcaption></figure>
-      <figure><img src="assets/fisheye_right.jpg" width="518" height="518" alt="Right fisheye input image"><figcaption>Right fisheye input</figcaption></figure>
+      <figure><img src="assets/indoor_fish_left_rgb.jpg" width="512" height="512" loading="lazy" alt="Indoor left eye fisheye RGB"><figcaption>Left eye — fisheye RGB</figcaption></figure>
+      <figure><img src="assets/indoor_fish_right_rgb.jpg" width="512" height="512" loading="lazy" alt="Indoor right eye fisheye RGB"><figcaption>Right eye — fisheye RGB</figcaption></figure>
     </div>
-    <figure><img src="assets/pano_rgb.jpg" width="1024" height="512" alt="Equirectangular 360 degree panorama of an indoor scene"><figcaption>Equirectangular (360°) panorama, indoor sample</figcaption></figure>
-    <figure><img src="assets/pano_depth.jpg" width="1024" height="512" alt="Panoramic depth map of the same indoor scene, jet colormap"><figcaption>Panoramic depth of the same scene (ground truth, jet colormap: blue = near, red = far)</figcaption></figure>
+    <div class="row">
+      <figure><img src="assets/indoor_fish_left_depth.jpg" width="512" height="512" loading="lazy" alt="Indoor left eye fisheye depth"><figcaption>Left eye — fisheye depth</figcaption></figure>
+      <figure><img src="assets/indoor_fish_right_depth.jpg" width="512" height="512" loading="lazy" alt="Indoor right eye fisheye depth"><figcaption>Right eye — fisheye depth</figcaption></figure>
+    </div>
+    <div class="row">
+      <figure><img src="assets/indoor_pano_left_rgb.jpg" width="1024" height="512" loading="lazy" alt="Indoor left eye 360° panorama RGB"><figcaption>Left eye — 360° panorama RGB</figcaption></figure>
+      <figure><img src="assets/indoor_pano_right_rgb.jpg" width="1024" height="512" loading="lazy" alt="Indoor right eye 360° panorama RGB"><figcaption>Right eye — 360° panorama RGB</figcaption></figure>
+    </div>
+    <div class="row">
+      <figure><img src="assets/indoor_pano_left_depth.jpg" width="1024" height="512" loading="lazy" alt="Indoor left eye 360° panorama depth"><figcaption>Left eye — 360° panorama depth</figcaption></figure>
+      <figure><img src="assets/indoor_pano_right_depth.jpg" width="1024" height="512" loading="lazy" alt="Indoor right eye 360° panorama depth"><figcaption>Right eye — 360° panorama depth</figcaption></figure>
+    </div>
+  </div>
+  <h3>Outdoor</h3>
+  <p class="note">Max depth 80 m (CARLA). Depth: jet colormap, 0–80 m (blue = near, red = far, black = invalid).</p>
+  <div class="stack">
+    <div class="row">
+      <figure><img src="assets/outdoor_fish_left_rgb.jpg" width="518" height="518" loading="lazy" alt="Outdoor left eye fisheye RGB"><figcaption>Left eye — fisheye RGB</figcaption></figure>
+      <figure><img src="assets/outdoor_fish_right_rgb.jpg" width="518" height="518" loading="lazy" alt="Outdoor right eye fisheye RGB"><figcaption>Right eye — fisheye RGB</figcaption></figure>
+    </div>
+    <div class="row">
+      <figure><img src="assets/outdoor_fish_left_depth.jpg" width="518" height="518" loading="lazy" alt="Outdoor left eye fisheye depth"><figcaption>Left eye — fisheye depth</figcaption></figure>
+      <figure><img src="assets/outdoor_fish_right_depth.jpg" width="518" height="518" loading="lazy" alt="Outdoor right eye fisheye depth"><figcaption>Right eye — fisheye depth</figcaption></figure>
+    </div>
+    <div class="row">
+      <figure><img src="assets/outdoor_pano_left_rgb.jpg" width="1024" height="512" loading="lazy" alt="Outdoor left eye 360° panorama RGB"><figcaption>Left eye — 360° panorama RGB</figcaption></figure>
+      <figure><img src="assets/outdoor_pano_right_rgb.jpg" width="1024" height="512" loading="lazy" alt="Outdoor right eye 360° panorama RGB"><figcaption>Right eye — 360° panorama RGB</figcaption></figure>
+    </div>
+    <div class="row">
+      <figure><img src="assets/outdoor_pano_left_depth.jpg" width="1024" height="512" loading="lazy" alt="Outdoor left eye 360° panorama depth"><figcaption>Left eye — 360° panorama depth</figcaption></figure>
+      <figure><img src="assets/outdoor_pano_right_depth.jpg" width="1024" height="512" loading="lazy" alt="Outdoor right eye 360° panorama depth"><figcaption>Right eye — 360° panorama depth</figcaption></figure>
+    </div>
   </div>
 </section>
 
