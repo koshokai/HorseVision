@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HorseVision — Equine-Inspired 360° Panoramic Depth Estimation from a Dual-Fisheye Rig (ACCV 2026)</title>
+<meta name="description" content="HorseVision (马眼视觉): official code for &quot;Equine-Inspired Vision System: Partially Self-supervised 360° Stereo Panoramic Depth Estimation&quot; (ACCV 2026). Feed-forward panoramic depth from a back-to-back dual-fisheye camera, built on Depth-Anything-V2.">
+<meta name="keywords" content="HorseVision, Horse Vision, equine-inspired vision, panoramic depth estimation, 360 depth estimation, dual fisheye, fisheye depth, stereo, self-supervised, Depth-Anything-V2, equirectangular, ACCV 2026, 马眼视觉">
+<meta name="author" content="Han Yu, Jianfeng Li, Shigang Li">
+<link rel="canonical" href="https://koshokai.github.io/HorseVision/">
+<meta property="og:type" content="website">
+<meta property="og:title" content="HorseVision — Equine-Inspired 360° Panoramic Depth Estimation">
+<meta property="og:description" content="Partially self-supervised 360° stereo panoramic depth from a back-to-back dual-fisheye rig (ACCV 2026).">
+<meta property="og:url" content="https://koshokai.github.io/HorseVision/">
+<meta property="og:image" content="https://koshokai.github.io/HorseVision/assets/pano_depth.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<!-- Google Search Console: paste your verification meta tag here, e.g.
+<meta name="google-site-verification" content="XXXXXXXX"> -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareSourceCode",
+  "name": "HorseVision",
+  "alternateName": "马眼视觉",
+  "description": "Feed-forward panoramic depth estimation from a back-to-back dual-fisheye rig, built on Depth-Anything-V2.",
+  "codeRepository": "https://github.com/koshokai/HorseVision",
+  "programmingLanguage": "Python",
+  "url": "https://koshokai.github.io/HorseVision/",
+  "author": [
+    {"@type": "Person", "name": "Han Yu"},
+    {"@type": "Person", "name": "Jianfeng Li"},
+    {"@type": "Person", "name": "Shigang Li"}
+  ],
+  "citation": {
+    "@type": "ScholarlyArticle",
+    "headline": "Equine-Inspired Vision System: Partially Self-supervised 360° Stereo Panoramic Depth Estimation",
+    "isPartOf": "Proceedings of the Asian Conference on Computer Vision (ACCV) 2026"
+  }
+}
+</script>
+<style>
+:root { --bg:#ffffff; --fg:#1f2328; --muted:#59636e; --accent:#0969da; --card:#f6f8fa; --border:#d1d9e0; }
+@media (prefers-color-scheme: dark) {
+  :root { --bg:#0d1117; --fg:#e6edf3; --muted:#9198a1; --accent:#4493f8; --card:#161b22; --border:#30363d; }
+}
+* { box-sizing: border-box; }
+body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif; }
+main { max-width:960px; margin:0 auto; padding:40px 16px 64px; }
+h1 { font-size:2rem; line-height:1.25; margin:0 0 8px; }
+h2 { font-size:1.35rem; margin:40px 0 12px; padding-bottom:6px; border-bottom:1px solid var(--border); }
+.sub { color:var(--muted); margin:0 0 4px; }
+a { color:var(--accent); }
+.buttons { display:flex; flex-wrap:wrap; gap:10px; margin:20px 0; }
+.buttons a { padding:8px 16px; border:1px solid var(--border); border-radius:6px; background:var(--card); text-decoration:none; font-weight:600; }
+figure { margin:0; }
+figure img { width:100%; height:auto; display:block; border-radius:6px; border:1px solid var(--border); }
+figcaption { color:var(--muted); font-size:.9rem; margin-top:6px; }
+.row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.stack { display:grid; gap:16px; }
+table { border-collapse:collapse; width:100%; }
+td, th { border:1px solid var(--border); padding:6px 10px; text-align:left; }
+pre { background:var(--card); border:1px solid var(--border); border-radius:6px; padding:12px; overflow-x:auto; font-size:.85rem; }
+@media (max-width:600px) { .row { grid-template-columns:1fr; } h1 { font-size:1.5rem; } }
+</style>
+</head>
+<body>
+<main>
+<header>
+  <h1>Equine-Inspired Vision System: Partially Self-supervised 360° Stereo Panoramic Depth Estimation</h1>
+  <p class="sub">Han Yu, Jianfeng Li, Shigang Li</p>
+  <p class="sub">Asian Conference on Computer Vision (ACCV) 2026 · Project <strong>HorseVision</strong> (马眼视觉)</p>
+  <div class="buttons">
+    <a href="https://github.com/koshokai/HorseVision">Code (GitHub)</a>
+    <a href="https://github.com/koshokai/HorseVision/releases">Pretrained models</a>
+    <a href="#citation">BibTeX</a>
+  </div>
+</header>
+
+<section>
+  <h2>Overview</h2>
+  <p>
+    Like a horse, whose laterally placed eyes see almost all the way around with a
+    small binocular overlap in front, HorseVision uses a <strong>back-to-back
+    dual-fisheye camera</strong> to estimate <strong>360° panoramic depth</strong>.
+    The two fisheye views are predicted independently by a shared
+    <a href="https://github.com/DepthAnything/Depth-Anything-V2">Depth-Anything-V2</a>
+    encoder, fused into an equirectangular panorama by geometric splatting, and
+    refined by a lightweight ViT (MiniDA3).
+  </p>
+  <p>
+    Self-supervision comes from the <strong>overlapping field of view</strong>
+    between the two lenses: each view is warped into the other using the predicted
+    depth, and the photometric agreement yields a per-pixel confidence map.
+  </p>
+</section>
+
+<section>
+  <h2>Inputs and outputs</h2>
+  <div class="stack">
+    <div class="row">
+      <figure><img src="assets/fisheye_left.jpg" width="518" height="518" alt="Left fisheye input image"><figcaption>Left fisheye input</figcaption></figure>
+      <figure><img src="assets/fisheye_right.jpg" width="518" height="518" alt="Right fisheye input image"><figcaption>Right fisheye input</figcaption></figure>
+    </div>
+    <figure><img src="assets/pano_rgb.jpg" width="1024" height="512" alt="Equirectangular 360 degree panorama of an indoor scene"><figcaption>Equirectangular (360°) panorama, indoor sample</figcaption></figure>
+    <figure><img src="assets/pano_depth.jpg" width="1024" height="512" alt="Panoramic depth map of the same indoor scene, jet colormap"><figcaption>Panoramic depth of the same scene (ground truth, jet colormap: blue = near, red = far)</figcaption></figure>
+  </div>
+</section>
+
+<section>
+  <h2>At a glance</h2>
+  <table>
+    <tr><th>Input</th><td>2 × fisheye RGB (518 × 518)</td></tr>
+    <tr><th>Output</th><td>Panoramic depth (518 × 1036), per-view fisheye depth, confidence maps</td></tr>
+    <tr><th>Peak GPU memory</th><td>1.14 GB</td></tr>
+    <tr><th>End-to-end runtime</th><td>3.9 s including model loading (RTX 4090)</td></tr>
+    <tr><th>Scenes</th><td>Indoor (max 20 m, Structured3D / HM3D) · Outdoor (max 80 m, CARLA)</td></tr>
+  </table>
+</section>
+
+<section>
+  <h2>Quick start</h2>
+<pre>git clone https://github.com/koshokai/HorseVision.git
+cd HorseVision
+git clone https://github.com/DepthAnything/Depth-Anything-V2.git
+python download_models.py --scene outdoor
+python test_single_conf.py</pre>
+  <p>See the <a href="https://github.com/koshokai/HorseVision#readme">README</a> for requirements, model zoo and configuration.</p>
+</section>
+
+<section id="citation">
+  <h2>Citation</h2>
+<pre>@inproceedings{horsevision,
+  title     = {Equine-Inspired Vision System: Partially Self-supervised 360{\textdegree} Stereo Panoramic Depth Estimation},
+  author    = {Yu, Han and Li, Jianfeng and Li, Shigang},
+  booktitle = {Proceedings of the Asian Conference on Computer Vision (ACCV)},
+  series    = {Lecture Notes in Computer Science},
+  publisher = {Springer},
+  year      = {2026}
+}</pre>
+</section>
+</main>
+</body>
+</html>

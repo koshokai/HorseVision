@@ -1,5 +1,9 @@
 # Horse Vision — Panoramic Depth from a Dual-Fisheye Rig
 
+Official code for **Equine-Inspired Vision System: Partially Self-supervised 360°
+Stereo Panoramic Depth Estimation** (ACCV 2026).
+**Project page:** https://koshokai.github.io/HorseVision/
+
 Feed-forward depth estimation for a **back-to-back dual-fisheye camera**. The two
 fisheye views are predicted independently by a shared Depth-Anything-V2 (DAv2)
 encoder, fused into an equirectangular panorama by geometric splatting, and then
