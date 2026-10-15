@@ -318,13 +318,13 @@ these parameters and retraining.
 ## 9. Citation
 
 ```bibtex
-@inproceedings{horsevision,
-  title     = {Equine-Inspired Vision System: Partially Self-supervised 360{\textdegree} Stereo Panoramic Depth Estimation},
-  author    = {Yu, Han and Li, Jianfeng and Li, Shigang},
-  booktitle = {Proceedings of the Asian Conference on Computer Vision (ACCV)},
-  series    = {Lecture Notes in Computer Science},
-  publisher = {Springer},
-  year      = {2026}
+@inproceedings{
+yu2026equineinspired,
+title={Equine-Inspired Vision System: Partially Self-supervised 360{\textdegree} Stereo Panoramic Depth Estimation},
+author={Han Yu and Jianfeng Li and Shigang Li},
+booktitle={Eighteenth Asian Conference on Computer Vision},
+year={2026},
+url={https://openreview.net/forum?id=Koe6h9l5w1}
 }
 ```
 
